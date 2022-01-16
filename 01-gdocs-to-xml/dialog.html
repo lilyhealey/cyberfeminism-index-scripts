@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      a.disabled {
+        color: gray;
+      }
+      a.failed {
+        color: #cc0000;
+      }
+    </style>
+    <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+    <script>
+      function onSuccess(res) {
+        console.log(res);
+        window.URL = window.URL || window.webkitURL;
+        var blob = new Blob([res.data], { type: 'text/plain' });
+        var bloblink = window.URL.createObjectURL(blob);
+
+        // construct the download link
+        var dl = document.getElementById("download");
+        dl.href = bloblink;
+        dl.download = res.name + '.' + res.ext;
+        dl.innerHTML = res.name + '.' + res.ext;
+        dl.classList.remove('disabled');
+
+        var helper = document.getElementById("helper");
+        helper.innerHTML = 'To download, right-click the link above and select "Save Link As..."';
+      }
+
+      function onFailure() {
+        var dl = document.getElementById("download");
+        dl.innerHTML = "Conversion failed. Check the document and try again."
+        dl.classList.add('failed');
+      }
+
+      google.script.run.withSuccessHandler(onSuccess)
+        .withFailureHandler(onFailure)
+        .createDownloadLink();
+    </script>
+  </head>
+  <body>
+    <p><a id="download" href="" class="disabled">Loading...</a></p>
+    <p id="helper"></p>
+    <button id="button" onclick="google.script.host.close()">Close</button>
+  </body>
+</html>
