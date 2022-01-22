@@ -1,19 +1,75 @@
+// SETTINGS
 const VERBOSE = false;
-const map = {
-  syntax: 'markup',
-  ext: 'xml',
-  inline: {
-    italic:     { start: '<italic>',    end: '</italic>'  },
-    bold:       { start: '<bold>',       end: '</bold>'    },
-    crossref:   { start: '<crossref>',   end: '</crossref>'},
-    annotation: { start: '<annotation>', end: '</annotation>\n'},
-    blockcrossref: { start: '<!-- ', end: ' -->\n'},
-    link: {
-      start: (url) => `<a href="${url}">`,
-      end:   () => '</a>',
+
+// CONSTANTS
+const ATTRIBUTES = [
+  'TITLE',
+  'SUBTITLE',
+  'BODY',
+  'ANNOTATION',
+  'CROSSREF',
+  'BOLD',
+  'ITALIC'
+];
+
+const MAP = {
+  TITLE:      { start: '<title>',      end: '</title>'},
+  SUBTITLE:   { start: '<subtitle>',   end: '</subtitle>'},
+  BODY:       { start: '<body>',   end: '</body>'},
+  ANNOTATION: { start: '<annotation>', end: '</annotation>'},
+  CROSSREF:   { start: '<crossref>',   end: '</crossref>'},
+  BOLD:       { start: '<bold>',       end: '</bold>'    },
+  ITALIC:     { start: '<italic>',     end: '</italic>'  },
+};
+
+const FORMATTING = [
+  {
+    name: 'TITLE',
+    style: {
+      fgColours: null,
+      bgColours: [
+        '#f4cccc',
+        '#e6b8af'
+      ],
+    }
+  },
+  {
+    name: 'SUBTITLE',
+    style: {
+      fgColours: null,
+      bgColours: [
+        '#d9ead3'
+      ],
+    }
+  },
+  {
+    name: 'ANNOTATION',
+    style: {
+      fgColours: null,
+      bgColours: [
+        '#c9daf8',
+        '#cfe2f3'
+      ],
+    }
+  },
+  {
+    name: 'CROSSREF',
+    style: {
+      fgColours: [
+        '#cccccc',
+        '#b7b7b7'                
+      ],
+      bgColours: null,
+    }
+  },
+  {
+    name: 'BODY',
+    style: {
+      fgColours: null,
+      bgColours: [ null, '#ffffff' ],
     }
   }
-};
+];
 
 /** 
  * Adds the menu item on open. 
@@ -22,6 +78,7 @@ function onOpen(e) {
   const ui = DocumentApp.getUi();
   ui.createAddonMenu()
     .addItem('Convert to XML', 'starterXML')
+    .addItem('Convert to TXT', 'starterTXT')
     .addToUi();
 }
 
@@ -30,6 +87,7 @@ function onOpen(e) {
  */
 function starterXML() {
   const template = HtmlService.createTemplateFromFile('dialog');
+  template.syntax = 'xml';
   const html = template.evaluate();
   html.setWidth(300)
     .setHeight(150); 
@@ -37,15 +95,33 @@ function starterXML() {
 }
 
 /** 
+ * Returns an HTML dialog with the download link.
+ */
+function starterTXT() {
+  const template = HtmlService.createTemplateFromFile('dialog');
+  template.syntax = 'txt';
+  const html = template.evaluate();
+  html.setWidth(300)
+    .setHeight(150); 
+  DocumentApp.getUi().showModalDialog(html, 'TXT Conversion');
+}
+
+/** 
  * This function is called from the HTML service output. It runs the converter
  * on the active document.
  */
-function createDownloadLink() {
+function createDownloadLink(syntax) {
+
   const document = DocumentApp.getActiveDocument();
-  Logger.log(document.getId());
-  const name = DocumentApp.getActiveDocument().getName() + '_' + timestamp();
-  const data = convertDocument(document);
-  const ext = 'xml';
+
+  const name = document.getName() + '-' + timestamp();
+  const data = syntax === 'xml'
+    ? convertDocument(document)
+    : document.getBody().getText();
+  const ext = syntax === 'xml'
+    ? 'xml'
+    : 'txt';
+
   return { name, data, ext };
 }
 
@@ -59,26 +135,147 @@ function convertDocument(document) {
   const body = document.getBody();
   const numChildren = body.getNumChildren();
 
+  // used to track the foreground and background colours in use
   const fgColours = [];
   const bgColours = [];
-  let xml = '';
+
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<document>';
+  let xmlParts = [];
+  let currXmlPart = '';
+  let firstGraf = true;
   let listIndex = 1;
+  let listId = null;
+  let listIndices = {};
   
   for (let i = 0; i < numChildren; i++) {
 
     const child = body.getChild(i);
 
+    /*
+    if (isListItem(child)) {
+      xml += `<number>${listIndex++}</number>\n`;
+    } else if (isH1(child)) {
+      xml += `<year>${child.getText()}</year>\n`;
+    } else {
+      let n = child.getNumChildren();
+      for (j = 0; j < n; j++) {
+        xml += `<p>${child.getChild(j).getText()}</p>\n`;
+      }
+    }
+    */
+
     if (isListItem(child)) {
 
+      firstGraf = true;
+
+      if (!listId) {
+        listId = child.getListId();
+      }
+
       // add number
-      xml += `<number>${listIndex++}</number>\n`;
+      if (listId == child.getListId()) {
 
-      xml += convertListItem(child);
+        // dump out anything in currXmlPart and add to xmlParts
+        // xmlParts.push(currXmlPart.trim());
+        xmlParts.push(adjustEntryXml(currXmlPart));
 
-    } else if (VERBOSE) {
-      Logger.log('NOT PROCESSED:');
-      Logger.log(child.getText());
+        // add the number
+        currXmlPart = `<number>${listIndex++}</number>\n`;
+
+        // convert the rest of the text
+        currXmlPart += convertListItem(child) + '\n';
+      } else {
+        let currListId = child.getListId();
+        let currListIndex = listIndices.hasOwnProperty(currListId)
+          ? listIndices[currListId]
+          : 1;
+        currXmlPart += convertListItem(child)
+          .replace(/^(<body>)/g, `$1${currListIndex}. `);
+        currXmlPart += '\n';
+        listIndices[currListId] = ++currListIndex;
+      }
+
+    } else if (isH1(child)) {
+
+      // dump out anything in currXmlPart and add to xmlParts
+      currXmlPart = adjustEntryXml(currXmlPart);
+
+      if (currXmlPart !== '') {
+        xmlParts.push(adjustEntryXml(currXmlPart));
+      }
+
+      // convert this h1
+      currXmlPart = `<year>${child.getText()}</year>`;
+
+    } else {
+
+      // convert the text
+      /*
+      if (firstGraf) {
+
+        firstGraf = false;
+
+        if (child.getText().trim() === '') {
+          // first graf is empty; don't include it
+          currXmlPart += '\n';
+          continue;
+        }
+      }
+      */
+
+      currXmlPart += convertListItem(child) + '\n';
     }
+
+    // if (isListItem(child)) {
+
+    //   if (!listId) {
+    //     listId = child.getListId();
+    //   }
+
+    //   // add number
+    //   if (listId == child.getListId()) {
+    //     if (startNewPart) {
+    //       currXmlPart = `<number>${listIndex++}</number>\n`;
+    //       currXmlPart += convertListItem(child);
+    //     } else {
+    //     }
+    //   }
+
+    // } else if (isH1(child)) {
+    //   xml += convertH1(child);
+    // } else {
+    //   // Logger.log(`NOT PROCESSED: ${listIndex}`);
+    //   // Logger.log(child.getText());
+    //   xml += convertListItem(child);
+    // }
+  }
+
+  // add the previous xmlPart
+  // xmlParts.push(currXmlPart.trim());
+  xmlParts.push(adjustEntryXml(currXmlPart));
+
+  // join all xmlParts with `\n'
+
+  Logger.log('FOREGROUND COLOURS:');
+  Logger.log(fgColours);
+  Logger.log('BACKGROUND COLOURS:');
+  Logger.log(bgColours);
+
+  // xml = xml.replace(/<body><\/body>\n(<number>)/g, '$1');
+  xml += xmlParts.join('\n');
+  xml += '</document>';
+
+  return xml;
+  // return XmlService.getRawFormat().format(XmlService.parse(xml));
+
+  function adjustEntryXml(entryXml) {
+    return entryXml
+      .trim()
+      .replace(/(<\/title>)(\s+)(<subtitle>)/g, '$1\n$3')
+      .replace(/(<\/subtitle>)(\s+)(<body>)/g, '$1\n$3')
+      .replace(/(<\/body>\n)(\s+?)(<body>)/g, '$1<body></body>\n$3')
+      .replace(/(<\/body>\n)(<annotation>)/g, '$1<body></body>\n$2')
+      .replace(/(<body>)\n/, '$1');
   }
 
   function convertListItem(listItem) {
@@ -91,18 +288,39 @@ function convertDocument(document) {
       const child = listItem.getChild(i);
   
       if (isText(child) && !isEmpty(child)) {
-        const textStr = convertInlineElements(child);
-        nodes = nodes.concat(convertBlockElements(textStr));
-      } else if (VERBOSE) {
-        Logger.log(child.getType());
+          const textStr = convertInlineElements(child)
+            // replace carriage returns with newlines
+            .replace(/\r/g, '\n')
+            // remove empty lines between tags
+            .replace(/>\n*\n</g, '>\n<');
+          nodes = nodes.concat(textStr);
+      } else {
+        Logger.log(`Could not convert list item child: ${child.getType()}`);
       }
     }
     
     // if the paragraph is empty (no child nodes), a newline will be returned.
     // return nodes.join('\n') + '\n';
-    var converted = nodes.join('\n') + '\n';
-    Logger.log(converted);
-    return converted;
+    // var converted = nodes.join('\n');
+    // return converted;
+    if (isListItem(listItem)) {
+      return nodes.join('\n').trim();
+    } else {
+      return nodes.join('\n');
+    }
+  }
+
+  function convertH1(h1) {
+
+    const numChildren = h1.getNumChildren();
+    let xml = '';
+
+    for (let i = 0; i < numChildren; i++) {
+      const child = h1.getChild(i);
+      xml += `<h1>${child.getText()}</h1>\n`;
+    }
+
+    return xml;
   }
 
   function convertInlineElements(textElem) {  
@@ -114,6 +332,8 @@ function convertDocument(document) {
 
       let atts = textElem.getAttributes(index);
       atts.INDEX = index;
+      atts.IN = [];
+      atts.OUT = [];
       attsArray.push(atts);
 
       // keep track of the foreground / background colours in use
@@ -125,62 +345,29 @@ function convertDocument(document) {
       }
     }
 
+    // add an element for the very end of the text
+    let endAtts = {
+      INDEX: (textElem.getText().length),
+      IN: [], // technically there would be no 'IN' attributes here, but . . . 
+      OUT: []
+    };
+    ATTRIBUTES.forEach(att => {
+      endAtts[att] = null;
+    });
+    attsArray.push(endAtts);
+
     try {
       attsArray = handleFormatting(attsArray);
-      attsArray = addInsAndOuts(attsArray, textElem);
+      attsArray = addInsAndOuts(attsArray);
       attsArray = removeEmptyRuns(attsArray);
       attsArray = trimWhitespace(attsArray, textElem);
       attsArray = sortInsAndOuts(attsArray);
-      // Logger.log(JSON.stringify(attrArray, null, "  "));
-      return addSyntax(attsArray, textElem, map);
+      return addSyntax(attsArray, textElem);
     } catch (error) {
       Logger.log(`ERROR: ${error.message}`);
       return '';
     }
   }
-
-  function convertBlockElements(text) {
-
-    let nodes = [];
-
-    // convert block-level elements
-    var regex = /\r{2}/gi;
-    if (regex.test(text)) {
-      var parts = text.split(regex);
-      var [header, ...rest] = parts;
-      var headerParts = header.split(/\r+/g);
-      for (var j = 0; j < headerParts.length; j++) {
-        const headerNode = `<header>${headerParts[j]}</header>`;
-        nodes.push(headerNode);
-      }
-      
-      for (var j = 0; j < rest.length; j++) {
-        const restPart = rest[j];
-        if (!/^<(annotation>|!--)/gi.test(restPart)) {
-          const restPartParts = restPart.split(/\r/g);
-          for (const rpp of restPartParts) {
-            const restPartNode = `<body>${rpp}</body>`;
-            nodes.push(restPartNode);
-          }
-        } else {
-          nodes.push(restPart);
-        }
-      }
-
-    } else if (VERBOSE) {
-      Logger.log('NO DOUBLE RETURN');
-      Logger.log(text);
-    }
-
-    return nodes;
-  }
-
-  Logger.log('FOREGROUND COLOURS:');
-  Logger.log(fgColours);
-  Logger.log('BACKGROUND COLOURS:');
-  Logger.log(bgColours);
-
-  return xml;
 }
 
 /**
@@ -188,204 +375,131 @@ function convertDocument(document) {
  * for the paragraph.
  */
 
-function handleFormatting(attrArray) {
+function handleFormatting(attsArray) {
 
-  const arr = JSON.parse(JSON.stringify(attrArray));
+  attsArray.forEach(item => {
 
-  const formatting = [
-    {
-      name: 'CROSSREF',
-      style: {
-        fgColours: [
-          '#cccccc',
-          '#b7b7b7'                
-        ],
-        bgColours: null,
-      }
-    },
-    {
-      name: 'ANNOTATION',
-      style: {
-        fgColours: null,
-        bgColours: [
-          '#c9daf8',
-          '#cfe2f3'
-        ],
-      }
-    },
-    {
-      name: 'BLOCK_CROSSREF',
-      style: {
-        fgColours: null,
-        bgColours: [
-          '#d9d9d9'
-        ]
-      }
-    },
-    {
-      name: 'IMAGE',
-      style: {
-        fgColours: null,
-        bgColours: [
-          '#d9ead3'
-        ]
-      }
-    }
-  ];
-
-  arr.forEach(item => {
-
-    for (const { name, style } of formatting) {
+    for (const { name, style } of FORMATTING) {
 
       const {
         fgColours,
         bgColours
       } = style;
 
-
       const fgMatch = fgColours != null
         ? item.FOREGROUND_COLOR && fgColours.includes(item.FOREGROUND_COLOR)
         : true;
 
-      const bgMatch = bgColours != null
-        ? item.BACKGROUND_COLOR && bgColours.includes(item.BACKGROUND_COLOR)
-        : true;
+      // const bgMatch = bgColours != null
+      //   ? item.BACKGROUND_COLOR && bgColours.includes(item.BACKGROUND_COLOR)
+      //   : true;
+      const bgMatch = bgColours == null
+        ? true
+        : bgColours.includes(null)
+          ? bgColours.includes(item.BACKGROUND_COLOR)
+          : item.BACKGROUND_COLOR && bgColours.includes(item.BACKGROUND_COLOR);
 
       item[name] = fgMatch && bgMatch;
     }
   });
 
-  return arr;
+  return attsArray;
 }
 
 /**
  * Removes the underline attribute from links and creates a 'LINK' attribute
  * with a boolean (or null) value for all other elements.
  */
- function handleLinks(attrArray) {
+ function handleLinks(attsArray) {
 
-  var linkArr = JSON.parse(JSON.stringify(attrArray));
-
-  linkArr.forEach(function (item) {
-    if (item['LINK_URL'] !== null) {
-      item['LINK'] = true;
-      item['UNDERLINE'] = null;
+  attsArray.forEach(function (atts) {
+    if (atts['LINK_URL'] !== null) {
+      atts['LINK'] = true;
+      atts['UNDERLINE'] = null;
     } else {
-      item['LINK'] = null;
+      atts['LINK'] = null;
     }
   });
 
-  return linkArr;
+  return attsArray;
 }
 
 /** 
  * Adds 'IN' and 'OUT' arrays to the array of attributes to identify which
  * styles (of the ones we care about) are beginning or ending at a given point.
  */
-function addInsAndOuts(array, textElem) {
+function addInsAndOuts(arr) {
 
-  var inOutArr = JSON.parse(JSON.stringify(array));
-  var attrs = [
-    'ITALIC',
-    'LINK',
-    'BOLD',
-    'UNDERLINE',
-    'CROSSREF',
-    'BLOCK_CROSSREF',
-    'ANNOTATION',
-    'IMAGE'
-  ];
-  
-  //add an element for the very end of the text
-  inOutArr.push({
-    INDEX: (textElem.getText().length), 
-    ITALIC: null, 
-    LINK: null, 
-    BOLD: null, 
-    UNDERLINE: null,
-    CROSSREF: null,
-    ANNOTATION: null,
-    BLOCK_CROSSREF: null,
-    IMAGE: null,
-    IN: [], 
-    OUT: []
+  if (arr.length === 0) {
+    return arr;
+  }
+
+  // the attributes at the start can only be 'IN' attributes
+  ATTRIBUTES.forEach(function (attr) {
+    if (arr[0][attr]) {
+      arr[0].IN.push(attr);
+    }
   });
-  
-  var staticLength = inOutArr.length;
-  
-  for (var i = 0; i < staticLength; i++) {
 
-    var obj = inOutArr[i];
-    delete obj.STRIKETHROUGH;
-    obj.IN = [];
-    obj.OUT = [];
-    
-    // The first attribute index has to be an 'in.' 
-    if (i === 0) {
-      attrs.forEach(function (attr) {
-        if (obj[attr]) {
-          obj.IN = [];
-          obj.IN.push(attr);
-        }
-      });
-    } else {
+  for (let i = 1; i < arr.length; i++) {
 
-      attrs.forEach(function (attr) {
-        if (obj[attr] && !(inOutArr[i - 1][attr])) {
-          obj.IN.push(attr);
-        }
-      });
+    ATTRIBUTES.forEach(function (attr) {
+
+      const prev = arr[i - 1][attr];
+      const curr = arr[i][attr];
+      
+      // add in attributes
+      if (curr && !prev) {
+        arr[i].IN.push(attr);
+      }
 
       // and now all the out ones.
-      attrs.forEach(function (attr) {
-        if (inOutArr[i - 1][attr] && !(obj[attr])) {
-          obj.OUT.push(attr);
-        }
-      });
-    } 
+      if (prev && !curr) {
+        arr[i].OUT.push(attr);
+      }
+
+    });
   }
-  
-  return inOutArr;
+
+  return arr;
 }
 
-function removeEmptyRuns(array) {
+function removeEmptyRuns(attsArray) {
 
-  var newArray = JSON.parse(JSON.stringify(array));
+  var newAttsArray = JSON.parse(JSON.stringify(attsArray));
 
   // Remove elements we don't care about.
-  for (var i = 0; i < newArray.length; i++) {
-    if ((newArray[i].IN.length === 0) && (newArray[i].OUT.length === 0))  {
-      newArray.splice(i, 1) 
+  for (let i = 0; i < newAttsArray.length; i++) {
+    const atts = newAttsArray[i];
+    if ((atts.IN.length === 0) && (atts.OUT.length === 0))  {
+      newAttsArray.splice(i, 1);
     }
   };
 
-  return newArray;
+  return newAttsArray;
 }
 
-function trimWhitespace(array, textElem) {
+function trimWhitespace(attsArray, textElem) {
 
-  var theText = textElem.getText();
-  var newArray = JSON.parse(JSON.stringify(array));
-  var staticLength = newArray.length - 1;
+  let newAttsArray = JSON.parse(JSON.stringify(attsArray));
+  const textStr = textElem.getText();
 
   // Avoid leading whitespace inside style tags.
-  for (var i = 1; i < staticLength; i++) {
+  let staticLength = newAttsArray.length - 1;
+  for (let i = 0; i < staticLength; i++) {
 
-    var prevObj = newArray[i-1];
-    var currObj = newArray[i];
-    var nextObj = newArray[i+1];
-
-    var prevText = theText.slice(prevObj.INDEX, currObj.INDEX);
-    var currText = theText.slice(currObj.INDEX, nextObj.INDEX);
+    let currObj = newAttsArray[i];
+    let nextObj = newAttsArray[i+1];
+    let currText = textStr.slice(currObj.INDEX, nextObj.INDEX);
 
     if (currObj.IN.length && /^\s+/.test(currText)) {
-      const result = /^\s+/.exec(currText);
+      const offset = /^\s+/.exec(currText)[0].length;
       if (currObj.OUT.length === 0) {
-        currObj.INDEX = currObj.INDEX + result[0].length;
+        currObj.INDEX = currObj.INDEX + offset;
       } else {
-        newArray.push({
+        newAttsArray.push({
           ...currObj,
-          INDEX: currObj.INDEX + result[0].length,
+          INDEX: currObj.INDEX + offset,
           OUT: []
         });
         currObj.IN = [];
@@ -393,28 +507,30 @@ function trimWhitespace(array, textElem) {
     }
   }
 
-  newArray.sort((a, b) => a.INDEX - b.INDEX);
-  newArray = consolidateArray(newArray);
-  staticLength = newArray.length - 1;
+  // reorder the array so that trailing whitespace can be handled correctly
+  newAttsArray.sort((a, b) => a.INDEX - b.INDEX);
+  newAttsArray = consolidateArray(newAttsArray);
 
   // Avoid trailing whitespace inside style tags.
-  for (var i = 1; i < staticLength; i++) {
+  staticLength = newAttsArray.length;
+  for (let i = 1; i < staticLength; i++) {
 
-    var prevObj = newArray[i-1];
-    var currObj = newArray[i];
-    var nextObj = newArray[i+1];
-
-    var prevText = theText.slice(prevObj.INDEX, currObj.INDEX);
-    var currText = theText.slice(currObj.INDEX, nextObj.INDEX);
+    let prevObj = newAttsArray[i-1];
+    let currObj = newAttsArray[i];
+    let prevText = textStr.slice(prevObj.INDEX, currObj.INDEX);
 
     if (currObj.OUT.length && /\s+$/.test(prevText)) {
-      const result = /\s+$/.exec(prevText);
+      const offset = /\s+$/.exec(prevText)[0].length;
+
+      // if the IN array is empty, we can repurpose this atts object for this
+      // new style range. otherwise, create a brand new style range, 
+      // effectively splitting this style range in two.
       if (currObj.IN.length === 0) {
-        currObj.INDEX = currObj.INDEX - result[0].length;
+        currObj.INDEX = currObj.INDEX - offset;
       } else {
-        newArray.push({
+        newAttsArray.push({
           ...currObj,
-          INDEX: currObj.INDEX - result[0].length,
+          INDEX: currObj.INDEX - offset,
           IN: []
         });
         currObj.OUT = [];
@@ -422,98 +538,74 @@ function trimWhitespace(array, textElem) {
     }
   }
 
-  newArray.sort((a, b) => a.INDEX - b.INDEX);
-  newArray = consolidateArray(newArray);
-  return newArray;
+  newAttsArray.sort((a, b) => a.INDEX - b.INDEX);
+  newAttsArray = consolidateArray(newAttsArray);
+
+  return newAttsArray;
 }
 
-function consolidateArray(arr) {
+function consolidateArray(attsArr) {
 
-  if (arr.length === 0) {
-    return arr;
+  if (attsArr.length === 0) {
+    return attsArr;
   }
 
-  var newArray = [];
-  var item = arr[0];
+  let newAttsArr = [];
+  let prevAtts = attsArr[0];
 
-  for (var i = 1; i < arr.length; i++) {
+  for (let i = 1; i < attsArr.length; i++) {
 
-    var currItem = arr[i];
+    let currAtts = attsArr[i];
 
-    if (currItem.INDEX !== item.INDEX) {
-      newArray.push(item);
-      item = currItem;
+    if (currAtts.INDEX !== prevAtts.INDEX) {
+      newAttsArr.push(prevAtts);
+      prevAtts = currAtts;
       continue;
     } else {
 
       // merge the current item with the item held in memory, so to speak
       const IN = new Set([
-        ...item.IN,
-        ...currItem.IN
+        ...prevAtts.IN,
+        ...currAtts.IN
       ]);
       const OUT = new Set([
-        ...item.OUT,
-        ...currItem.OUT
+        ...prevAtts.OUT,
+        ...currAtts.OUT
       ]);
 
-      item = {
-        ...item,
-        ...currItem,
+      prevAtts = {
+        ...prevAtts,
+        ...currAtts,
         // we want the set difference, because something being in both the IN
         // and OUT array is meaningless -- no need to stop then start again.
         IN: [...setDifference(IN, OUT)],
         OUT: [...setDifference(OUT, IN)],
       };
     }
-
   }
 
-  newArray.push(item);
+  newAttsArr.push(prevAtts);
 
-  return newArray;
+  return newAttsArr;
 }
 
+/**
+ * Sort the IN and OUT arrays such that they are mirror images of each other,
+ * of sorts. That is, the IN array should follow the order of ATTRIBUTES and
+ * the OUT array should be in the reverse order of ATTRIBUTES, so close tags
+ * mirror open tags properly.
+ * @param {*} attsArray 
+ * @returns 
+ */
 function sortInsAndOuts(attsArray) {
 
   for (let i = 0; i < attsArray.length; i++) {
-    // The two sort functions below make sure that if two styles start or end
-    // at the same place, they don't get put in the wrong order (the one that
-    // starts first ends last, etc.)
-    if (attsArray[i].IN.length > 1) {
-      attsArray[i].IN.sort(
-        function (attA, attB) {
-          for (let j = 0; j < (attsArray.length - i) ; j++) {
-            const indexA = attsArray[i + j].OUT.indexOf(attA);
-            const indexB = attsArray[i + j].OUT.indexOf(attB);
-            if (indexA > -1 || indexB === -1) {
-              return -1;
-            } else if (indexB > -1 || indexA === -1) {
-              return 1;
-            } else if (indexB > -1 || indexA > -1) {
-              return 0; 
-            }
-          }
-        }
-      );
-    }
-  
-    if (attsArray[i].OUT.length > 1) {
-      attsArray[i].OUT.sort(
-        function (attA, attB) {
-          for (let k = 0; k < i; k++) {
-            const indexA = attsArray[i - k].IN.indexOf(attA);
-            const indexB = attsArray[i - k].IN.indexOf(attB);
-            if (indexA > -1 || indexB === -1) {
-              return 1;
-            } else if (indexB > -1 || indexA === -1) {
-              return -1;
-            } else if (indexB > -1 || indexA > -1) {
-              return 0; 
-            }
-          }
-        }
-      ); 
-    }
+    attsArray[i].IN.sort((a, b) => (
+      ATTRIBUTES.indexOf(a) - ATTRIBUTES.indexOf(b)
+    ));
+    attsArray[i].OUT.sort((a, b) => (
+      ATTRIBUTES.indexOf(b) - ATTRIBUTES.indexOf(a)
+    ));
   }
 
   return attsArray;
@@ -528,76 +620,45 @@ function sortInsAndOuts(attsArray) {
  *   - moves inflection points to avoid 'styled' whitespace
  *   - sorts the [IN] and [OUT] arrays to properly handle nested styles.
  */
- function addSyntax(array, textElem, map){
-  
+ function addSyntax(attsArr, textElem){
+
   const textStr = textElem.getText();
   let currIndex = 0;
-  var attsArray = JSON.parse(JSON.stringify(array));
-  var textWithSyntax = "";
+  let textWithSyntax = '';
   
-  for (let i = 0; i < attsArray.length; i++) {
+  for (const atts of attsArr) {
     
     // add the text from the previous run
-    if (currIndex < attsArray[i].INDEX) {
-      const subtext = textStr.substring(currIndex, attsArray[i].INDEX);
-      // if (map.syntax === maps.markdown.syntax) {
-      //   textWithSyntax += escapeLists(subtext);
-      // }
-      // if (map.syntax === maps.markup.syntax) {
-      //   textWithSyntax += entitize(subtext);
-      // }
-      textWithSyntax += subtext;
-      currIndex = attsArray[i].INDEX;
+    if (currIndex < atts.INDEX) {
+      const substr = textStr.substring(currIndex, atts.INDEX)
+      textWithSyntax += entitize(substr);
+      currIndex = atts.INDEX;
     }
 
     // Outgoing styles should be added first, in the unusual event that a style
     // stops exactly where the next one begins.
-    for (const att of attsArray[i].OUT) {
-      if (att === 'ITALIC') {
-        textWithSyntax += map.inline.italic.end; 
-      } else if (att === 'BOLD') {
-        textWithSyntax += map.inline.bold.end;
-      } else if (att === 'LINK') {
-        var url = attsArray[i - 1].LINK_URL;
-        textWithSyntax += (map.inline.link.end(url));
-      } else if (att === 'ANNOTATION') {
-        textWithSyntax += map.inline.annotation.end;
-      } else if (att === 'CROSSREF') {
-        textWithSyntax += map.inline.crossref.end;
-      } else if (att === 'BLOCK_CROSSREF' || att === 'IMAGE') {
-        textWithSyntax += map.inline.blockcrossref.end;
-      }
+    for (const att of atts.OUT) {
+      textWithSyntax += MAP[att].end;
     }
     
-    for (const att of attsArray[i].IN) {
-      if (att === 'ITALIC') {
-        textWithSyntax += map.inline.italic.start; 
-      } else if (att === 'BOLD') {
-        textWithSyntax += map.inline.bold.start;
-      } else if (att === 'LINK') {
-        var url = attsArray[i].LINK_URL;
-        textWithSyntax += (map.inline.link.start(url));
-      } else if (att === 'ANNOTATION') {
-        textWithSyntax += map.inline.annotation.start;
-      } else if (att === 'CROSSREF') {
-        textWithSyntax += map.inline.crossref.start;
-      } else if (att === 'BLOCK_CROSSREF' || att === 'IMAGE') {
-        textWithSyntax += map.inline.blockcrossref.start;
-      }
+    for (const att of atts.IN) {
+      textWithSyntax += MAP[att].start;
     }
-    
-    // if we're at the end, and there is still text left, add it.
-    if (i === (attsArray.length - 1) && textStr.length > attsArray[i].INDEX) {
-      const subtext = textStr.substring(attsArray[i].INDEX);
-      // if (map.syntax === maps.markdown.syntax) {
-      //   textWithSyntax += escapeLists(subtext); 
-      // }
-      // if (map.syntax === maps.markup.syntax) {
-      //   textWithSyntax += entitize(subtext);
-      // }
-      textWithSyntax += subtext;
-    }
-
   }
+
+  // if there's still text at the end, add it
+  // what about the OUT array at the end?
+  const endAtts = attsArr[attsArr.length - 1];
+  if (textStr.length > endAtts.INDEX) {
+    const substr = textStr.substring(endAtts.INDEX);
+    textWithSyntax += entitize(substr);
+  }
+
   return textWithSyntax;  
+}
+
+function entitize(str) {
+  return str.replace(/&/g, '&#38;')
+    .replace(/</g, '&#60;')
+    .replace(/>/g, '&#62;');
 }

@@ -2,6 +2,14 @@ function isParagraph(element) {
   return element && element.getType() === DocumentApp.ElementType.PARAGRAPH;
 }
 
+function isH1(element) {
+  return (
+    element && 
+    element.getType() === DocumentApp.ElementType.PARAGRAPH &&
+    element.getHeading() === DocumentApp.ParagraphHeading.HEADING1
+  );
+}
+
 function isListItem(element) {
   return element && element.getType() === DocumentApp.ElementType.LIST_ITEM;
 }

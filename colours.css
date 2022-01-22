@@ -1,0 +1,23 @@
+.fg {
+  --gray1: #cccccc;
+  --gray2: #b7b7b7;
+  --blue:  #1155cc;
+}
+
+.bg {
+
+  /* TITLE */
+  --light-red:    #f4cccc;
+
+  /* SUBTITLE */
+  --light-orange: #fce5cd;
+
+  /* ANNOTATION */
+  --light-blue1:  #c9daf8;
+  --light-blue2:  #cfe2f3;
+
+  --green:        #00ff00;
+
+  --gray3:        #d9d9d9;
+  --white:        #ffffff;
+}

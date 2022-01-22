@@ -37,7 +37,7 @@
 
       google.script.run.withSuccessHandler(onSuccess)
         .withFailureHandler(onFailure)
-        .createDownloadLink();
+        .createDownloadLink('<?= syntax ?>');
     </script>
   </head>
   <body>

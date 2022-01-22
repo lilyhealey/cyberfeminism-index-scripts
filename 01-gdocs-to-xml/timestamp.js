@@ -8,10 +8,10 @@
  function timestamp() {
 
   var months = [
-    'Jan', 'Feb', 'Mar',
-    'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep',
-    'Oct', 'Nov', 'Dec',
+    'jan', 'feb', 'mar',
+    'apr', 'may', 'jun',
+    'jul', 'aug', 'sep',
+    'oct', 'nov', 'dec',
   ];
   var now = new Date();
   var hour = now.getHours();
@@ -41,8 +41,8 @@
   // 1547
   var t = [hour, minute].join('');
 
-  // jan-01-2020
-  var d = [month, day, year].join('-');
+  // 01-jan-2020
+  var d = [day, month, year].join('-');
 
   // jan-01-2020-at-1547
   var dt = [d, t].join('-at-');
