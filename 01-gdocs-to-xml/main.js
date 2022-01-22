@@ -1,6 +1,3 @@
-// SETTINGS
-const VERBOSE = false;
-
 // CONSTANTS
 const ATTRIBUTES = [
   'TITLE',
@@ -140,9 +137,12 @@ function convertDocument(document) {
   const bgColours = [];
 
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<document>';
-  let xmlParts = [];
-  let currXmlPart = '';
-  let firstGraf = true;
+
+  // entry data
+  let entries = [];
+  let currEntryXml = '';
+
+  // list data
   let listIndex = 1;
   let listId = null;
   let listIndices = {};
@@ -166,8 +166,6 @@ function convertDocument(document) {
 
     if (isListItem(child)) {
 
-      firstGraf = true;
-
       if (!listId) {
         listId = child.getListId();
       }
@@ -175,98 +173,58 @@ function convertDocument(document) {
       // add number
       if (listId == child.getListId()) {
 
-        // dump out anything in currXmlPart and add to xmlParts
-        // xmlParts.push(currXmlPart.trim());
-        xmlParts.push(adjustEntryXml(currXmlPart));
+        // dump out anything in currEntryXml and add to entries
+        entries.push(adjustEntryXml(currEntryXml));
 
         // add the number
-        currXmlPart = `<number>${listIndex++}</number>\n`;
+        currEntryXml = `<number>${listIndex++}</number>\n`;
 
         // convert the rest of the text
-        currXmlPart += convertListItem(child) + '\n';
+        currEntryXml += convertListItem(child) + '\n';
       } else {
         let currListId = child.getListId();
         let currListIndex = listIndices.hasOwnProperty(currListId)
           ? listIndices[currListId]
           : 1;
-        currXmlPart += convertListItem(child)
+        // add the number to the start of the list item
+        currEntryXml += convertListItem(child)
           .replace(/^(<body>)/g, `$1${currListIndex}. `);
-        currXmlPart += '\n';
+        currEntryXml += '\n';
         listIndices[currListId] = ++currListIndex;
       }
 
     } else if (isH1(child)) {
 
       // dump out anything in currXmlPart and add to xmlParts
-      currXmlPart = adjustEntryXml(currXmlPart);
+      currEntryXml = adjustEntryXml(currEntryXml);
 
-      if (currXmlPart !== '') {
-        xmlParts.push(adjustEntryXml(currXmlPart));
+      if (currEntryXml !== '') {
+        entries.push(adjustEntryXml(currEntryXml));
       }
 
       // convert this h1
-      currXmlPart = `<year>${child.getText()}</year>`;
+      currEntryXml = `<year>${child.getText()}</year>`;
 
     } else {
-
-      // convert the text
-      /*
-      if (firstGraf) {
-
-        firstGraf = false;
-
-        if (child.getText().trim() === '') {
-          // first graf is empty; don't include it
-          currXmlPart += '\n';
-          continue;
-        }
-      }
-      */
-
-      currXmlPart += convertListItem(child) + '\n';
+      currEntryXml += convertListItem(child) + '\n';
     }
-
-    // if (isListItem(child)) {
-
-    //   if (!listId) {
-    //     listId = child.getListId();
-    //   }
-
-    //   // add number
-    //   if (listId == child.getListId()) {
-    //     if (startNewPart) {
-    //       currXmlPart = `<number>${listIndex++}</number>\n`;
-    //       currXmlPart += convertListItem(child);
-    //     } else {
-    //     }
-    //   }
-
-    // } else if (isH1(child)) {
-    //   xml += convertH1(child);
-    // } else {
-    //   // Logger.log(`NOT PROCESSED: ${listIndex}`);
-    //   // Logger.log(child.getText());
-    //   xml += convertListItem(child);
-    // }
   }
-
-  // add the previous xmlPart
-  // xmlParts.push(currXmlPart.trim());
-  xmlParts.push(adjustEntryXml(currXmlPart));
-
-  // join all xmlParts with `\n'
 
   Logger.log('FOREGROUND COLOURS:');
   Logger.log(fgColours);
   Logger.log('BACKGROUND COLOURS:');
   Logger.log(bgColours);
 
-  // xml = xml.replace(/<body><\/body>\n(<number>)/g, '$1');
-  xml += xmlParts.join('\n');
+  // add the previous xmlPart
+  entries.push(adjustEntryXml(currEntryXml));
+
+  // join all of the entries together
+  xml += entries.join('\n');
+
+  // close the document
   xml += '</document>';
 
   return xml;
-  // return XmlService.getRawFormat().format(XmlService.parse(xml));
 
   function adjustEntryXml(entryXml) {
     return entryXml
