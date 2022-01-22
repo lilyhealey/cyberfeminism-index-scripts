@@ -271,10 +271,25 @@ function convertDocument(document) {
   function adjustEntryXml(entryXml) {
     return entryXml
       .trim()
+      // remove trailing whitespace after block-level closing tags:
+      // - </title>
+      // - </subtitle>
+      // - </body>
+      // - </annotation>
+      .replace(/<\/title>([ \f\t\v]+?)$/gm, '</title>')
+      .replace(/<\/subtitle>([ \f\t\v]+?)$/gm, '</subtitle>')
+      .replace(/<\/body>([ \f\t\v]+?)$/gm, '</body>')
+      .replace(/<\/annotation>([ \f\t\v]+?)$/gm, '</annotation>')
+      // remove extra newlines between <title> and <subtitle> nodes
       .replace(/(<\/title>)(\s+)(<subtitle>)/g, '$1\n$3')
+      // remove extra newlines between <subtitle> and <body> nodes
       .replace(/(<\/subtitle>)(\s+)(<body>)/g, '$1\n$3')
+      // replace valid empty lines with <body> nodes
       .replace(/(<\/body>\n)(\s+?)(<body>)/g, '$1<body></body>\n$3')
-      .replace(/(<\/body>\n)(<annotation>)/g, '$1<body></body>\n$2')
+      // replace empty lines between <body> and <annotation> nodes with a
+      // <body> node
+      .replace(/(<\/body>\n)(\s*?)(<annotation>)/g, '$1<body></body>\n$3')
+      // replace newlines at the start of body nodes
       .replace(/(<body>)\n/, '$1');
   }
 

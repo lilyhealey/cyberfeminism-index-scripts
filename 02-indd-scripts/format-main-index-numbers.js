@@ -1,6 +1,6 @@
-var MAIN_INDEX_NUMBER_PS_NAME = 'main-index-number';
+var MAIN_INDEX_NUMBER_PS_NAME = 'number';
 var MAIN_INDEX_NUMBER_OS_NAME = 'main-index-number';
-var CENTERED_PS_NAME = 'centred';
+var CENTERED_PS_NAME = 'number';
 
 // get the MAIN_INDEX_NUMBER_PS
 function getParStyleByName(doc, parStyleName) {
