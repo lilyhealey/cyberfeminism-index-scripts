@@ -1,3 +1,10 @@
+// ============================================================================
+// reapply-object-styles.js
+//
+// given a list of pre-defined object styles, scan all of the page items of
+// the current indesign document for objects with one of styles applied, and
+// reapply the style to clear overrides.
+// ============================================================================
 
 // every page item that currently has one of the below object styles applied
 // will have the style re-applied, with overrides cleared.
@@ -84,4 +91,5 @@ function main() {
   alert('done');
 }
 
+// run it
 main();
