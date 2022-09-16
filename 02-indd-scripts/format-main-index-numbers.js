@@ -4,7 +4,6 @@ var CENTERED_PS_NAME = 'number';
 
 // get the MAIN_INDEX_NUMBER_PS
 function getParStyleByName(doc, parStyleName) {
-
   for (var i = 0; i < doc.allParagraphStyles.length; i++) {
     var ps = doc.allParagraphStyles[i];
     if (ps.name == parStyleName) {
@@ -13,12 +12,10 @@ function getParStyleByName(doc, parStyleName) {
   }
 
   return null;
-
 }
 
 // get the MAIN_INDEX_NUMBER_OS
 function getObjectStyleByName(doc, objectStyleName) {
-
   for (var i = 0; i < doc.allObjectStyles.length; i++) {
     var os = doc.allObjectStyles[i];
     if (os.name == objectStyleName) {
@@ -27,7 +24,6 @@ function getObjectStyleByName(doc, objectStyleName) {
   }
 
   return null;
-
 }
 
 // scan scan all of the stories for text with MAIN_INDEX_NUMBER_PS par style
@@ -40,9 +36,7 @@ function getObjectStyleByName(doc, objectStyleName) {
 // 4. cut object and paste where MAIN_INDEX_NUMBER text was
 
 function createIndexNumberObject(doc, text, par) {
-
   var os = getObjectStyleByName(doc, MAIN_INDEX_NUMBER_OS_NAME);
-
   var tf = doc.textFrames.add();
 
   tf.contents = text;
@@ -59,7 +53,6 @@ function createIndexNumberObject(doc, text, par) {
 }
 
 function findParagraphAndSelect(doc) {
-
   var mainIndexPs = getParStyleByName(doc, MAIN_INDEX_NUMBER_PS_NAME);
   var centeredPs = getParStyleByName(doc, CENTERED_PS_NAME);
   var numStories = doc.stories.length;
@@ -86,7 +79,6 @@ function findParagraphAndSelect(doc) {
 }
 
 function alignIndexNumbers(doc) {
-
   for (var k = 0; k < doc.stories.length; k++) {
     var story = doc.stories[k];
     for (var j = 0; j < story.paragraphs.length; j++) {
@@ -99,10 +91,8 @@ function alignIndexNumbers(doc) {
       }
     }
   }
-
   // alert(doc.textFrames.length);
   // alert(doc.textFrames[i].textFrames.length);
-
 }
 // get the active document
 function main() {
